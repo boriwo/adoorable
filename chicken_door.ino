@@ -55,6 +55,7 @@ char pass[] = SECRET_PASS; // password
 int keyIndex = 0; // network key index number (WEP only)
 
 String temperature = "";
+float temperatureFloat = 0.0;
 String doorStatus = "ok";
 String operationMode = "";
 
@@ -456,7 +457,8 @@ int getTimerStatus() {
 
 String getTemperature() {
   sensors.requestTemperatures();
-  temperature = sensors.getTempCByIndex(0);
+  temperatureFloat = sensors.getTempCByIndex(0);
+  temperature = String(temperatureFloat);
   return temperature;
 }
 
