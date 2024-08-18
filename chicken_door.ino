@@ -109,14 +109,16 @@ void addLogEntry() {
 void setup() {
   sensors.begin();
   setupDoor();
-  setupWifi();
-}
-
-void setupWifi() {
   if (DEBUG) Serial.begin(9600);
   while (!Serial);
   //delay(1000);
   digitalWrite(LED1, HIGH);
+  setupWifi();
+  server.begin();
+  printWifiStatus();
+}
+
+void setupWifi() {
   while (WiFi.status() == WL_NO_MODULE) {
     if (DEBUG) Serial.println("Communication with WiFi module failed");
     digitalWrite(LED2, HIGH);
@@ -132,6 +134,12 @@ void setupWifi() {
   digitalWrite(LED3, HIGH);
   if (DEBUG) Serial.println("setting ip address");
   WiFi.config(ip);
+  // in case this is a reconnect after connection failure, disconnect if already connected
+  if (WiFi.status() == WL_CONNECTED) {
+    if (DEBUG) Serial.println("disconnecting");
+    WiFi.disconnect();
+    delay(1000); // short delay to ensure disconnection
+  }
   while (status != WL_CONNECTED) {
     if (DEBUG) Serial.print("Attempting to connect to network: ");
     if (DEBUG) Serial.println(ssid);
@@ -145,8 +153,6 @@ void setupWifi() {
     delay(9000);
   }
   digitalWrite(LED4, HIGH);
-  server.begin();
-  printWifiStatus();
 }
 
 void setupDoor() {
@@ -172,6 +178,10 @@ void loop() {
 }
 
 void wifiLoop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    if (DEBUG) Serial.println("WiFi disconnected, attempting to reconnect...");
+    setupWifi();
+  } 
   WiFiClient client = server.available();   // listen for incoming clients
   if (client) {                             // if you get a client,
     if (DEBUG) Serial.println("new client");           // print a message out the serial port
