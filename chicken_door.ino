@@ -5,9 +5,11 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include <EEPROM.h>
+
 #include "arduino_secrets.h"
 
-IPAddress ip(192, 168, 30, 88); 
+IPAddress ip(192, 168, 30, 88);
 
 struct LogEntry {
   long time;
@@ -35,8 +37,8 @@ int M1 = 7;
 int M2 = 8;
 int PWM = 9;
 
-int REED_TOP = 10; // top
-int REED_BOTTOM = 11; // bottom
+int REED_TOP = 10;     // top
+int REED_BOTTOM = 11;  // bottom
 
 int SWITCH_OPEN = 13;
 int SWITCH_CLOSE = 12;
@@ -46,15 +48,20 @@ int KILL_SWITCH = 6;
 int DAYLIGHT_THRESHOLD = 75;
 int NIGHTLIGHT_THRESHOLD = 10;
 int DAYLIGHT_MODE = 1;
-long DAYLIGHT_CHECK_INTERVAL = 20l*60l*1000l; // 20 mins in ms
+long DAYLIGHT_CHECK_INTERVAL = 20l * 60l * 1000l;  // 20 mins in ms
 //long DAYLIGHT_CHECK_INTERVAL = 1l*60l*1000l; // 1 min in ms
 long DAYLIGHT_LAST_CHECK_TIME = 0;
 
+int DAYLIGHT_MODE_ADR = 0;
+int DAYLIGHT_THRESHOLD_ADR = 1;
+int NIGHTLIGHT_THRESHOLD_ADR = 2;
+int TIMER_MODE_ADR = 3;
+
 int TIMER_MODE = 0;
 
-char ssid[] = SECRET_SSID; // SSID (case sensitive)
-char pass[] = SECRET_PASS; // password
-int keyIndex = 0; // network key index number (WEP only)
+char ssid[] = SECRET_SSID;  // SSID (case sensitive)
+char pass[] = SECRET_PASS;  // password
+int keyIndex = 0;           // network key index number (WEP only)
 
 String temperature = "";
 float temperatureFloat = 0.0;
@@ -70,6 +77,34 @@ OneWire oneWire(TEMP1);
 DallasTemperature sensors(&oneWire);
 
 int DEBUG = 1;
+
+void readSettings() {
+  if (DEBUG) Serial.println("loading configs");
+  DAYLIGHT_MODE = EEPROM.read(DAYLIGHT_MODE_ADR);
+  if (DAYLIGHT_MODE == 1) {
+    operationMode = "photosensor";
+  }
+  DAYLIGHT_THRESHOLD = EEPROM.read(DAYLIGHT_THRESHOLD_ADR);
+  if (DAYLIGHT_THRESHOLD == 0) {
+    DAYLIGHT_THRESHOLD = 15;
+  }
+  NIGHTLIGHT_THRESHOLD = EEPROM.read(NIGHTLIGHT_THRESHOLD_ADR);
+  if (NIGHTLIGHT_THRESHOLD == 0) {
+    NIGHTLIGHT_THRESHOLD = 5;
+  }
+  TIMER_MODE = EEPROM.read(TIMER_MODE_ADR);
+  if (TIMER_MODE == 1) {
+    operationMode = "timer";
+  }
+}
+
+void updateSettings() {
+  //if (DEBUG) Serial.println("updating configs");
+  EEPROM.update(DAYLIGHT_MODE_ADR, DAYLIGHT_MODE);
+  EEPROM.update(DAYLIGHT_THRESHOLD_ADR, DAYLIGHT_THRESHOLD);
+  EEPROM.update(NIGHTLIGHT_THRESHOLD_ADR, NIGHTLIGHT_THRESHOLD);
+  EEPROM.update(TIMER_MODE_ADR, TIMER_MODE);
+}
 
 void addLogEntry() {
   LogEntry ce = events[eventIdx];
@@ -103,16 +138,18 @@ void addLogEntry() {
   ce.mode = String(operationMode);
   ce.temperature = getTemperature();
   events[eventIdx] = ce;
-  eventIdx = (eventIdx + 1)%NUM_LOG_ENTRIES;
+  eventIdx = (eventIdx + 1) % NUM_LOG_ENTRIES;
 }
 
 void setup() {
   sensors.begin();
   setupDoor();
   if (DEBUG) Serial.begin(9600);
-  while (!Serial);
+  while (!Serial)
+    ;
   //delay(1000);
   digitalWrite(LED1, HIGH);
+  readSettings();
   setupWifi();
   server.begin();
   printWifiStatus();
@@ -138,7 +175,7 @@ void setupWifi() {
   if (WiFi.status() == WL_CONNECTED) {
     if (DEBUG) Serial.println("disconnecting");
     WiFi.disconnect();
-    delay(1000); // short delay to ensure disconnection
+    delay(1000);  // short delay to ensure disconnection
   }
   while (status != WL_CONNECTED) {
     if (DEBUG) Serial.print("Attempting to connect to network: ");
@@ -181,16 +218,16 @@ void wifiLoop() {
   if (WiFi.status() != WL_CONNECTED) {
     if (DEBUG) Serial.println("WiFi disconnected, attempting to reconnect...");
     setupWifi();
-  } 
-  WiFiClient client = server.available();   // listen for incoming clients
-  if (client) {                             // if you get a client,
-    if (DEBUG) Serial.println("new client");           // print a message out the serial port
-    String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected()) {            // loop while the client's connected
-      if (client.available()) {             // if there's bytes to read from the client,
-        char c = client.read();             // read a byte, then
-        if (DEBUG) Serial.write(c);                    // print it out the serial monitor
-        if (c == '\n') {                    // if the byte is a newline character
+  }
+  WiFiClient client = server.available();     // listen for incoming clients
+  if (client) {                               // if you get a client,
+    if (DEBUG) Serial.println("new client");  // print a message out the serial port
+    String currentLine = "";                  // make a String to hold incoming data from the client
+    while (client.connected()) {              // loop while the client's connected
+      if (client.available()) {               // if there's bytes to read from the client,
+        char c = client.read();               // read a byte, then
+        if (DEBUG) Serial.write(c);           // print it out the serial monitor
+        if (c == '\n') {                      // if the byte is a newline character
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
           if (currentLine.length() == 0) {
@@ -209,11 +246,11 @@ void wifiLoop() {
             client.println("input{font-size:101%;}");
             client.println("</style></head>");
             client.println("<html>");
-            client.println("<h1>Chicken Door Manager V2.1.0</h1>");
+            client.println("<h1>Chicken Door Manager V4.2 08/18/2024</h1>");
             client.println("<p><table border='0'>");
-            if (isDoorOpen()==1) {
+            if (isDoorOpen() == 1) {
               client.print("<tr><td>Door Status:</td><td><i>open</i></td></tr>");
-            } else if (isDoorClosed()==1) {
+            } else if (isDoorClosed() == 1) {
               client.print("<tr><td>Door Status:</td><td><i>closed</i></td></tr>");
             } else {
               client.print("<tr><td>Door Status:</td><td><i>unknown</i></td></tr>");
@@ -227,44 +264,44 @@ void wifiLoop() {
             client.print("<tr><td>Daylight Threshold:</td><td><i>");
             client.print(String(DAYLIGHT_THRESHOLD));
             client.print("</i></td></tr>");
-client.print("<tr><td>&nbsp;</td><td><i>");
+            client.print("<tr><td>&nbsp;</td><td><i>");
             client.print("<form action=\"/U\" method=\"GET\"><input type=\"text\" id=\"pt\" name=\"pt\"/><input type=\"submit\" value=\"update\"></form>");
             client.print("</i></td></tr>");
             //
             client.print("<tr><td>Nightlight Threshold:</td><td><i>");
             client.print(String(NIGHTLIGHT_THRESHOLD));
             client.print("</i></td></tr>");
-client.print("<tr><td>&nbsp;</td><td><i>");
+            client.print("<tr><td>&nbsp;</td><td><i>");
             client.print("<form action=\"/N\" method=\"GET\"><input type=\"text\" id=\"pt\" name=\"pt\"/><input type=\"submit\" value=\"update\"></form>");
             client.print("</i></td></tr>");
             //
             int lightStrength = getDaylightStrength();
             if (isDaylight()) {
-client.print("<tr><td>Environment:</td><td><i>day [");
+              client.print("<tr><td>Environment:</td><td><i>day [");
               client.print(String(lightStrength));
               client.print("]</i></td></tr>");
             } else if (isNightlight()) {
-client.print("<tr><td>Environment:</td><td><i>night [");
+              client.print("<tr><td>Environment:</td><td><i>night [");
               client.print(String(lightStrength));
               client.print("]</i></td></tr>");
             } else {
-client.print("<tr><td>Environment:</td><td><i>changing [");
+              client.print("<tr><td>Environment:</td><td><i>changing [");
               client.print(String(lightStrength));
               client.print("]</i></td></tr>");
             }
             long delta = millis() - DAYLIGHT_LAST_CHECK_TIME;
             // abs() function seems buggy
-            if (delta<0) {
+            if (delta < 0) {
               delta = -delta;
             }
             client.print("<tr><td>Photo Sensor Check TTL:</td><td><i>");
-client.print(String(long(DAYLIGHT_CHECK_INTERVAL/(1000.0*60.0))-long(delta/(1000.0*60.0))));
+            client.print(String(long(DAYLIGHT_CHECK_INTERVAL / (1000.0 * 60.0)) - long(delta / (1000.0 * 60.0))));
             client.print(" min</i></td></tr>");
             //
             if (TIMER_MODE == 1) {
-client.print("<tr><td>Timer:</td><td><i>active</i></td></tr>");
+              client.print("<tr><td>Timer:</td><td><i>active</i></td></tr>");
             } else {
-client.print("<tr><td>Timer:</td><td><i>disabled</i></td></tr>");
+              client.print("<tr><td>Timer:</td><td><i>disabled</i></td></tr>");
             }
             if (getTimerStatus()) {
               client.print("<tr><td>Timer Status:</td><td><i>on</i></td></tr>");
@@ -303,48 +340,60 @@ client.print("<tr><td>Timer:</td><td><i>disabled</i></td></tr>");
             client.print("</i></td></tr>");
             //
             temperature = getTemperature();
-client.print("<tr><td>Temperature:</td><td>");
+            client.print("<tr><td>Temperature:</td><td>");
             client.print(temperature);
             client.print(" C</td></tr>");
-client.print("<tr><td>Uptime:</td><td><i>");
-            client.print(String(long(millis()/(1000.0*60.0))));
+            client.print("<tr><td>Uptime:</td><td><i>");
+            client.print(String(long(millis() / (1000.0 * 60.0))));
             client.print(" min</i></td></tr>");
-client.print("<tr><td>SSID:</td><td><i>");
+            client.print("<tr><td>SSID:</td><td><i>");
             client.print(WiFi.SSID());
             client.print("</i></td></tr>");
-client.print("<tr><td>IP:</td><td><i>");
+            client.print("<tr><td>IP:</td><td><i>");
             client.print(WiFi.localIP());
             client.print("</i></td></tr>");
             client.print("<tr><td>Signal Strength (RSSI):</td><td><i>");
             client.print(WiFi.RSSI());
             client.print("</i></td></tr>");
-client.print("<tr><td>&nbsp;</td><td></td></tr>");
+            client.print("<tr><td>&nbsp;</td><td></td></tr>");
             client.print("<tr><td><a href=\"/H\">OPEN</a></td><td></td></tr>");
-client.print("<tr><td>&nbsp;</td><td></td></tr>");
+            client.print("<tr><td>&nbsp;</td><td></td></tr>");
             client.print("<tr><td><a href=\"/L\">CLOSE</a></td><td></td></tr>");
-client.print("<tr><td>&nbsp;</td><td></td></tr>");
+            client.print("<tr><td>&nbsp;</td><td></td></tr>");
             client.print("<tr><td><a href=\"/P\">TOGGLE PHOTO SENSOR</a></td><td></td></tr>");
-client.print("<tr><td>&nbsp;</td><td></td></tr>");
+            client.print("<tr><td>&nbsp;</td><td></td></tr>");
             client.print("<tr><td><a href=\"/T\">TOGGLE TIMER</a></td><td></td></tr>");
-client.print("<tr><td>&nbsp;</td><td></td></tr>");
+            client.print("<tr><td>&nbsp;</td><td></td></tr>");
             client.print("<tr><td><a href=\"/\">REFRESH</a></td><td></td></tr>");
             client.println("</table></p>");
             //
             client.println("<p><table border='1'>");
             client.print("<tr>");
-client.print("<th></th><th>Time</th><th>Ago</th><th>Operation Mode</th><th>Door Status</th><th>Light</th><th></th><th>Temperature</th><th>Reed Top</th><th>Red Bottom</th><th>Kill Switch</th>");
+            client.print("<th></th><th>Time</th><th>Ago</th><th>Operation Mode</th><th>Door Status</th><th>Light</th><th></th><th>Temperature</th><th>Reed Top</th><th>Red Bottom</th><th>Kill Switch</th>");
             client.print("</tr>");
-            for (int i=0; i<NUM_LOG_ENTRIES; i++) {
+            for (int i = 0; i < NUM_LOG_ENTRIES; i++) {
               if (events[i].time == 0) {
                 continue;
               }
               client.print("<tr>");
-              client.print("<td>"); client.print(String(i)); client.print("</td>");
-              client.print("<td>"); client.print(String(events[i].time)); client.print("</td>");
-              client.print("<td>"); client.print(getDeltaTimeString(events[i].time)); client.print("</td>");
-              client.print("<td>"); client.print(events[i].mode); client.print("</td>");
-              client.print("<td>"); client.print(events[i].doorStatus); client.print("</td>");
-              client.print("<td>"); client.print(String(events[i].light)); client.print("</td>");
+              client.print("<td>");
+              client.print(String(i));
+              client.print("</td>");
+              client.print("<td>");
+              client.print(String(events[i].time));
+              client.print("</td>");
+              client.print("<td>");
+              client.print(getDeltaTimeString(events[i].time));
+              client.print("</td>");
+              client.print("<td>");
+              client.print(events[i].mode);
+              client.print("</td>");
+              client.print("<td>");
+              client.print(events[i].doorStatus);
+              client.print("</td>");
+              client.print("<td>");
+              client.print(String(events[i].light));
+              client.print("</td>");
               if (events[i].light > DAYLIGHT_THRESHOLD) {
                 client.print("<td>day</td>");
               } else if (events[i].light < DAYLIGHT_THRESHOLD) {
@@ -352,10 +401,18 @@ client.print("<th></th><th>Time</th><th>Ago</th><th>Operation Mode</th><th>Door 
               } else {
                 client.print("<td></td>");
               }
-              client.print("<td>"); client.print(events[i].temperature); client.print("</td>");
-              client.print("<td>"); client.print(events[i].reedTop); client.print("</td>");
-              client.print("<td>"); client.print(events[i].reedBottom); client.print("</td>");
-              client.print("<td>"); client.print(events[i].killSwitch); client.print("</td>");
+              client.print("<td>");
+              client.print(events[i].temperature);
+              client.print("</td>");
+              client.print("<td>");
+              client.print(events[i].reedTop);
+              client.print("</td>");
+              client.print("<td>");
+              client.print(events[i].reedBottom);
+              client.print("</td>");
+              client.print("<td>");
+              client.print(events[i].killSwitch);
+              client.print("</td>");
               client.print("</tr>");
             }
             client.println("</table></p>");
@@ -365,7 +422,7 @@ client.print("<th></th><th>Time</th><th>Ago</th><th>Operation Mode</th><th>Door 
             client.println();
             // break out of the while loop:
             break;
-          } else {    // if you got a newline, then clear currentLine:
+          } else {  // if you got a newline, then clear currentLine:
             currentLine = "";
           }
         } else if (c != '\r') {  // if you got anything else but a carriage return character,
@@ -384,20 +441,24 @@ client.print("<th></th><th>Time</th><th>Ago</th><th>Operation Mode</th><th>Door 
           if (DAYLIGHT_MODE) {
             TIMER_MODE = 0;
           }
+          updateSettings();
         }
         if (currentLine.endsWith("GET /T")) {
           TIMER_MODE = !TIMER_MODE;
           if (TIMER_MODE) {
             DAYLIGHT_MODE = 0;
           }
+          updateSettings();
         }
         if (currentLine.indexOf("/U?pt=") > 0) {
-          String val = currentLine.substring(currentLine.indexOf("/U?pt=")+6);
+          String val = currentLine.substring(currentLine.indexOf("/U?pt=") + 6);
           DAYLIGHT_THRESHOLD = val.toInt();
+          updateSettings();
         }
         if (currentLine.indexOf("/N?pt=") > 0) {
-          String val = currentLine.substring(currentLine.indexOf("/N?pt=")+6);
+          String val = currentLine.substring(currentLine.indexOf("/N?pt=") + 6);
           NIGHTLIGHT_THRESHOLD = val.toInt();
+          updateSettings();
         }
       }
     }
@@ -410,10 +471,10 @@ void doorLoop() {
   delay(100);
   int open = digitalRead(SWITCH_OPEN);
   int close = digitalRead(SWITCH_CLOSE);
-  if (close==LOW) {
+  if (close == LOW) {
     operationMode = "manual local";
     closeDoor();
-  } else if (open==LOW) {
+  } else if (open == LOW) {
     operationMode = "manual local";
     openDoor();
   } else {
@@ -437,7 +498,7 @@ void printWifiStatus() {
   Serial.print("signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
-  Serial.print("To see this page in action, open a browser to http://");
+  Serial.print("chicken service endpoint: http://");
   Serial.println(ip);
 }
 
@@ -571,7 +632,7 @@ void motorFadeInLeft() {
   analogWrite(PWM, pwm);
   digitalWrite(M1, LOW);
   digitalWrite(M2, HIGH);
-  for (int pwm=0; pwm<255; pwm++) {
+  for (int pwm = 0; pwm < 255; pwm++) {
     analogWrite(PWM, pwm);
     delay(10);
   }
@@ -583,7 +644,7 @@ void motorFadeInRight() {
   analogWrite(PWM, pwm);
   digitalWrite(M1, HIGH);
   digitalWrite(M2, LOW);
-  for (int pwm=0; pwm<255; pwm++) {
+  for (int pwm = 0; pwm < 255; pwm++) {
     analogWrite(PWM, pwm);
     delay(10);
   }
@@ -591,7 +652,7 @@ void motorFadeInRight() {
 }
 
 void blinkDown() {
-  for (int i=0; i<5; i++) {
+  for (int i = 0; i < 5; i++) {
     digitalWrite(LED1, HIGH);
     delay(30);
     digitalWrite(LED1, LOW);
@@ -612,7 +673,7 @@ void blinkDown() {
 }
 
 void blinkUp() {
-  for (int i=0; i<5; i++) {
+  for (int i = 0; i < 5; i++) {
     digitalWrite(LED4, HIGH);
     delay(30);
     digitalWrite(LED4, LOW);
@@ -633,7 +694,7 @@ void blinkUp() {
 }
 
 void blinkIn() {
-  for (int i=0; i<3; i++) {
+  for (int i = 0; i < 3; i++) {
     digitalWrite(LED4, HIGH);
     digitalWrite(LED1, HIGH);
     delay(60);
@@ -650,7 +711,7 @@ void blinkIn() {
 }
 
 void blinkOut() {
-  for (int i=0; i<5; i++) {
+  for (int i = 0; i < 5; i++) {
     digitalWrite(LED3, HIGH);
     digitalWrite(LED2, HIGH);
     delay(60);
@@ -689,7 +750,7 @@ int waitForReedOrKill(int reedNum) {
       return 0;
     }
     int killSwitch = digitalRead(KILL_SWITCH);
-    if (killSwitch==LOW) {
+    if (killSwitch == LOW) {
       return 1;
     }
   }
@@ -729,13 +790,13 @@ void openDoor() {
   blinkUp();
   long start = millis();
   int killCnt = 0;
-  int motorState = 0; // 0 = stop, 1 = left, 2 = right
+  int motorState = 0;  // 0 = stop, 1 = left, 2 = right
   motorLeftSpeed(255);
   motorState = 1;
   while (true) {
-    delay(5); // without this we get wrong readings on kill switch status
+    delay(5);  // without this we get wrong readings on kill switch status
     long now = millis();
-    if ((now-start)/1000>30) {
+    if ((now - start) / 1000 > 30) {
       // timeout after 30 sec
       motorStop();
       doorStatus = "timeout on open";
@@ -750,7 +811,7 @@ void openDoor() {
     }
     if (killSwitchEngaged()) {
       killCnt++;
-      if (killCnt>=3) {
+      if (killCnt >= 3) {
         motorStop();
         doorStatus = "jammed on open";
         addLogEntry();
@@ -759,12 +820,12 @@ void openDoor() {
         motorRightSpeed(255);
         motorState = 2;
         doorStatus = "reversed right";
-        delay(400); // if kill switch time to disengage
+        delay(400);  // if kill switch time to disengage
       } else if (motorState == 2) {
         motorLeftSpeed(255);
         motorState = 1;
         doorStatus = "reversed left";
-        delay(400); // if kill switch time to disengage
+        delay(400);  // if kill switch time to disengage
       } else {
         motorStop();
         doorStatus = "unknown malfunction";
@@ -815,13 +876,13 @@ void closeDoor() {
   blinkDown();
   long start = millis();
   int killCnt = 0;
-  int motorState = 0; // 0 = stop, 1 = left, 2 = right
+  int motorState = 0;  // 0 = stop, 1 = left, 2 = right
   motorRightSpeed(255);
   motorState = 2;
   while (true) {
-    delay(5); // without this we get wrong readings on kill switch status
+    delay(5);  // without this we get wrong readings on kill switch status
     long now = millis();
-    if ((now-start)/1000>30) {
+    if ((now - start) / 1000 > 30) {
       // timeout after 30 sec
       motorStop();
       doorStatus = "timeout on close";
@@ -829,7 +890,7 @@ void closeDoor() {
       return;
     }
     if (reedEngaged(REED_BOTTOM)) {
-      delay(600); // wait to engage locks
+      delay(600);  // wait to engage locks
       motorStop();
       doorStatus = "closed";
       addLogEntry();
@@ -837,7 +898,7 @@ void closeDoor() {
     }
     if (killSwitchEngaged()) {
       killCnt++;
-      if (killCnt>=3) {
+      if (killCnt >= 3) {
         motorStop();
         doorStatus = "jammed on close";
         addLogEntry();
@@ -846,12 +907,12 @@ void closeDoor() {
         motorRightSpeed(255);
         motorState = 2;
         doorStatus = "reversed right";
-        delay(400); // if kill switch time to disengage
+        delay(400);  // if kill switch time to disengage
       } else if (motorState == 2) {
         motorLeftSpeed(255);
         motorState = 1;
         doorStatus = "reversed left";
-        delay(400); // if kill switch time to disengage
+        delay(400);  // if kill switch time to disengage
       } else {
         motorStop();
         doorStatus = "unknown malfunction";
