@@ -7,6 +7,8 @@
 
 #include "arduino_secrets.h"
 
+IPAddress ip(192, 168, 30, 88); 
+
 struct LogEntry {
   long time;
   String mode;
@@ -125,11 +127,11 @@ void setupWifi() {
   digitalWrite(LED2, HIGH);
   if (DEBUG) Serial.println("WiFi module found");
   String fv = WiFi.firmwareVersion();
-  if (fv != "1.0.0") {
-    if (DEBUG) Serial.println("Please upgrade the firmware");
-  }
-  if (DEBUG) Serial.println("WiFi firmware ok");
+  if (DEBUG) Serial.print("WiFi firmware version ");
+  if (DEBUG) Serial.println(fv);
   digitalWrite(LED3, HIGH);
+  if (DEBUG) Serial.println("setting ip address");
+  WiFi.config(ip);
   while (status != WL_CONNECTED) {
     if (DEBUG) Serial.print("Attempting to connect to network: ");
     if (DEBUG) Serial.println(ssid);
