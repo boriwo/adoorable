@@ -83,18 +83,24 @@ void readSettings() {
   DAYLIGHT_MODE = EEPROM.read(DAYLIGHT_MODE_ADR);
   if (DAYLIGHT_MODE == 1) {
     operationMode = "photosensor";
+  } else if (DAYLIGHT_MODE == 0) {
+  } else {
+    DAYLIGHT_MODE = 0;
   }
   DAYLIGHT_THRESHOLD = EEPROM.read(DAYLIGHT_THRESHOLD_ADR);
-  if (DAYLIGHT_THRESHOLD == 0) {
+  if (DAYLIGHT_THRESHOLD == 0 || DAYLIGHT_THRESHOLD == 255) {
     DAYLIGHT_THRESHOLD = 15;
   }
   NIGHTLIGHT_THRESHOLD = EEPROM.read(NIGHTLIGHT_THRESHOLD_ADR);
-  if (NIGHTLIGHT_THRESHOLD == 0) {
+  if (NIGHTLIGHT_THRESHOLD == 0 || NIGHTLIGHT_THRESHOLD == 255) {
     NIGHTLIGHT_THRESHOLD = 5;
   }
   TIMER_MODE = EEPROM.read(TIMER_MODE_ADR);
   if (TIMER_MODE == 1) {
     operationMode = "timer";
+  } else if (TIMER_MODE == 0) {
+  } else {
+    TIMER_MODE = 0;
   }
 }
 
